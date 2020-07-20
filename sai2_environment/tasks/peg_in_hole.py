@@ -9,7 +9,7 @@ class PegInHole(Task):
         self._client = redis_client
         self._simulation = simulation
         self.TARGET_OBJ_POSITION_KEY  = "sai2::ReinforcementLearning::peg_in_hole::object_position" # Changed this to peg in hole
-        self.GOAL_POSITION_KEY  = "sai2::ReinforcementLearning::peg_in_hole::goal_position" # Changed this to peg in hole
+        self.GOAL_POSITION_KEY  = "sai2::ReinforcementLearning::move_object_to_target::goal_position" # Changed this to peg in hole
 
         if simulation:
             

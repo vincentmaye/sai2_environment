@@ -68,13 +68,13 @@ class RobotEnv(object):
 
         self.action_space = self._robot_action.action_space
         self.contact_event = False
-        self.camera_handler = CameraHandler(self.env_config['camera_resolution'])
+        #self.camera_handler = CameraHandler(self.env_config['camera_resolution'])
 
         self.scaler = MinMaxScaler()
         self.scaler.fit([np.concatenate((Range.q["min"], Range.q_dot["min"], Range.tau["min"], np.zeros(1))), 
                          np.concatenate((Range.q["max"], Range.q_dot["max"], Range.tau["max"], np.ones(1)))])
 
-        self.camera_thread = threading.Thread(name="camera_thread", target= self.camera_handler.start_pipeline)
+        #self.camera_thread = threading.Thread(name="camera_thread", target= self.camera_handler.start_pipeline)
         self.contact_thread = threading.Thread(name="contact_thread", target= self.get_contact)
         
         if not self.env_config["simulation"]:

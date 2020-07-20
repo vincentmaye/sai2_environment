@@ -20,7 +20,7 @@ def main():
                    blocking_action=blocking_action,
                    rotation_axis=(0, 0, 1))    
 
-    episodes = 50
+    episodes = 1 #was 50
     steps = 200
 
     start_time = time.time()    
