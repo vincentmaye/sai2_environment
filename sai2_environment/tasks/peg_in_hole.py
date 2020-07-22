@@ -8,15 +8,13 @@ class PegInHole(Task):
         self._task_name = task_name
         self._client = redis_client
         self._simulation = simulation
-        self.TARGET_OBJ_POSITION_KEY  = "sai2::ReinforcementLearning::peg_in_hole::object_position" # Changed this to peg in hole
-        self.GOAL_POSITION_KEY  = "sai2::ReinforcementLearning::move_object_to_target::goal_position" # Changed this to peg in hole
-
+        self.ROBOT_POS_EE_KEY = "sai2::PandaApplication::peg_in_hole::robot_pos_ee"; # Changed this to peg in hole
+        self.GOAL_POSITION_KEY  = "sai2::ReinforcementLearning::move_object_to_target::goal_position"
         if simulation:
-            
             self.goal_position = self._client.redis2array(self._client.get(self.GOAL_POSITION_KEY))
-            self.current_obj_position = self.get_current_position()
-            self.last_obj_position = self.current_obj_position
-            self.total_distance = self.euclidean_distance(self.goal_position, self.current_obj_position)
+            self.current_ee_pos = self.get_current_position()
+            self.last_ee_pos = self.euclidean_distance(self.goal_position, self.current_ee_pos)
+            self.total_distance = self.euclidean_distance(self.goal_position, self.current_ee_pos)
         else:
             #setup the things that we need in the real world
             self.goal_position = None
@@ -26,14 +24,14 @@ class PegInHole(Task):
 
     def compute_reward(self):
         if self._simulation:
-            self.last_obj_position = self.current_obj_position
-            self.current_obj_position = self.get_current_position()
-            d0 = self.euclidean_distance(self.goal_position, self.last_obj_position)
-            d1 = self.euclidean_distance(self.goal_position, self.current_obj_position)
+            self.last_ee_pos = self.current_ee_pos
+            self.current_ee_pos = self.get_current_position()
+            d0 = self.euclidean_distance(self.goal_position, self.last_ee_pos)
+            d1 = self.euclidean_distance(self.goal_position, self.current_ee_pos)
 
             reward = (d0 - d1)/self.total_distance
             #radius of target location is 0.04
-            done = np.linalg.norm(self.goal_position - self.current_obj_position) < 0.04
+            done = np.linalg.norm(self.goal_position - self.current_ee_pos) < 0.01
         else:
             #TODO
             reward = 0
@@ -45,5 +43,5 @@ class PegInHole(Task):
         return np.linalg.norm(x1 - x2)
 
     def get_current_position(self):
-        return self._client.redis2array(self._client.get(self.TARGET_OBJ_POSITION_KEY))
+        return self._client.redis2array(self._client.get(self.ROBOT_POS_EE_KEY))
 
