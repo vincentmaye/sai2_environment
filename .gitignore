@@ -106,6 +106,8 @@ celerybeat.pid
 spinningup/
 baselines/
 RWHEC-Tabb-AhmadYousef/
+Peg_in_hole_assembly/
+
 # Environments
 .env
 .venv
