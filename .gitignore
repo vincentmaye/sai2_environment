@@ -102,6 +102,13 @@ celerybeat.pid
 # SageMath parsed files
 *.sage.py
 
+# Other repositories
+spinningup/
+baselines/
+RWHEC-Tabb-AhmadYousef/
+Peg_in_hole_assembly/
+spinup/
+.vscode/
 # Environments
 .env
 .venv
@@ -128,3 +135,7 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Dont push images
+*.png
+*.jpg
