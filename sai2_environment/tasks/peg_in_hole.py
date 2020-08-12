@@ -1,47 +1,58 @@
 from sai2_environment.tasks.task import Task
 import numpy as np
 
-#ToDo : CHANGE EVERYTHING FOR PEG IN HOLE
+#Reward based on Vision and Touch paper: https://arxiv.org/pdf/1907.13098.pdf
 
 class PegInHole(Task):
     def __init__(self, task_name, redis_client, simulation=True):
         self._task_name = task_name
         self._client = redis_client
         self._simulation = simulation
-        self.ROBOT_POS_EE_KEY = "sai2::PandaApplication::peg_in_hole::robot_pos_ee"; # Changed this to peg in hole
-        self.GOAL_POSITION_KEY  = "sai2::ReinforcementLearning::move_object_to_target::goal_position"
+        self.ROBOT_POS_EE_KEY = "sai2::PandaApplication::peg_in_hole::robot_pos_ee"; # Will return bottom of peg
+        self.GOAL_POS_KEY  = "sai2::ReinforcementLearning::move_object_to_target::goal_position"
         if simulation:
-            self.goal_position = self._client.redis2array(self._client.get(self.GOAL_POSITION_KEY))
-            self.current_ee_pos = self.get_current_position()
-            self.last_ee_pos = self.euclidean_distance(self.goal_position, self.current_ee_pos)
-            self.total_distance = self.euclidean_distance(self.goal_position, self.current_ee_pos)
+            self.hole_pos = self._client.redis2array(self._client.get(self.GOAL_POS_KEY))
+            self.hole_pos[2] += 0.06 # adjust z-position such that it gives top of the hole
+            self.current_ee_pos = self.get_current_pos() # returns bottom of peg
+            # Hyperparameters for reward
+            self.lamda = 1 # Should equal max distance between peg and hole, assumed 1m, intentional typo here
+            self.ca = 1
+            self.ci = 2
+            self.cr = 1
+            self.epsilon1 = 0.05 # maximal reward in alignment stage when peg closer than 5cm to goal
+            self.epsilon2 = 0.01 # success, when only 0.5cm away from max insertion depth
+            self.hd = 0.03 #depth of the hole in 3cm, peg can be inserted approx. 2.5cm
         else:
             #setup the things that we need in the real world
-            self.goal_position = None
-            self.current_obj_position = None
-            self.last_obj_position = None
-            self.total_distance = None
+            self.goal_pos = None
+            self.hole_pos = None
 
     def compute_reward(self):
         if self._simulation:
-            self.last_ee_pos = self.current_ee_pos
-            self.current_ee_pos = self.get_current_position()
-            d0 = self.euclidean_distance(self.goal_position, self.last_ee_pos)
-            d1 = self.euclidean_distance(self.goal_position, self.current_ee_pos)
+            self.current_ee_pos = self.get_current_pos()
+            diff_ee_hole = self.current_ee_pos - self.hole_pos # called s in the paper
+            done = False
+            # Staged reward depending on phase of task
+            if np.linalg.norm(diff_ee_hole) <= self.epsilon1: # Alignment phase
+                reward = 1 + self.ca * (1 - np.linalg.norm(diff_ee_hole)/self.epsilon1)
+            elif diff_ee_hole[2] < 0: # if z-position smaller zero, meaning alignment done and insertion starts
+                reward = 2 + self.ci(self.hd - np.labs(diff_ee_hole[2]))
+            elif np.abs(self.hd - diff_ee_hole[2]) <= self.epsilon2:
+                reward = 5
+                done = True
+            else:
+                reward = self.cr*(1-(np.tanh(self.lamda * np.linalg.norm(diff_ee_hole))))
 
-            reward = (d0 - d1)/self.total_distance
-            #radius of target location is 0.04
-            done = np.linalg.norm(self.goal_position - self.current_ee_pos) < 0.01
         else:
             #TODO
             reward = 0
             done = False
-
+        #print("REWARD", reward)
         return reward, done
 
     def euclidean_distance(self, x1, x2):
         return np.linalg.norm(x1 - x2)
 
-    def get_current_position(self):
-        return self._client.redis2array(self._client.get(self.ROBOT_POS_EE_KEY))
+    def get_current_pos(self):
+        return self._client.redis2array(self._client.get(self.ROBOT_POS_EE_KEY)) # returns pos of the peg bottom
 

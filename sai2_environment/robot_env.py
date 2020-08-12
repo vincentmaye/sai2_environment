@@ -131,13 +131,18 @@ class RobotEnv(object):
             self.take_action(action)
             time.sleep(0.01)
             t0 = time.time()
-
+            sleep_counter = 0
             while not self._client.action_complete():
-                time.sleep(0.01)
+                sleep_counter += 1
+                time.sleep(3)
+                print("Sleep counter : {}\n".format(sleep_counter))
                 if time.time()-t0 > self.blocking_time:
-                    break
-
-            reward, done = self._compute_reward()
+                    break 
+            if sleep_counter > 0:
+                reward, done = self._compute_reward()
+            else:
+                reward, done = 0, False
+            
 
         # non-blocking does not wait and computes reward right away
         else:
