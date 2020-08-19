@@ -37,7 +37,8 @@ MANIFEST
 # Installer logs
 pip-log.txt
 pip-delete-this-directory.txt
-
+logs/
+reinforcement_learning/logs
 # Unit test / coverage reports
 htmlcov/
 .tox/

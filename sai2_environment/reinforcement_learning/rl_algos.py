@@ -278,38 +278,48 @@ def sac(env_fn, actor_critic=CNNActorCritic, ac_kwargs=dict(), seed=0,
         steps_per_epoch=4000, epochs=100, replay_size=int(1e4), gamma=0.99, 
         polyak=0.995, lr=1e-3, alpha=0.2, batch_size=100, start_steps=10000, 
         update_after=1000, update_every=50, num_test_episodes=10, max_ep_len=1000, 
-        logger_kwargs=dict(), save_freq=1, DEBUG=False, ERRORS_OFF=True):
+        logger_kwargs=dict(), save_freq=1, DEBUG=False):
 
     global Kx_i, Ky_i, Kz_i
-    test = 3
+    test = 1
     if test == 1:
         # 10% default values
         steps_per_epoch = 400
         epochs = 10
-        batch_size = 10
-        start_steps = 100
+        batch_size = 2
+        start_steps = 50
         update_every = 20
         update_after = 100
         max_ep_len = 100
         num_test_episodes = 2
     elif test == 2:
         # First test parameters
-        epochs = 50
+        epochs = 5000
         steps_per_epoch = 120
         num_test_episodes = 2
-        update_every = 40
-        update_after = 40
-        max_ep_len = 60
-        start_steps = 40
+        update_every = 300
+        update_after = 2000
+        max_ep_len = 1000
+        start_steps = 2000
     elif test == 3:
         # Quick test parameters
         epochs = 1
-        steps_per_epoch = 60
+        steps_per_epoch = 20
         num_test_episodes = 2
-        update_every = 10
-        update_after = 50
+        update_every = 5
+        update_after = 10
+        max_ep_len = 15
+        start_steps = 5
+
+    elif test == 4:
+        # Quick test parameters
+        epochs = 1
+        steps_per_epoch = 50
+        num_test_episodes = 2
+        update_every = 5
+        update_after = 40
         max_ep_len = 55
-        start_steps = 10
+        start_steps = 20
 
     wait_after_env_reset_time = 3
     amount_of_crashes = 0
@@ -423,14 +433,14 @@ def sac(env_fn, actor_critic=CNNActorCritic, ac_kwargs=dict(), seed=0,
                 # Test step the env
                 o, r, d, _ = test_env.step(a)
 
-                if reward not 0:
-                    print(" Current Action command: {} \n".format(a))
-                    print(" TEST REWARD: {}\n".format(r))
+                if r != 0:
+                    #print(" Current TEST Action command: {} \n".format(a))
+                    print(" Action from CNN ACTOR: TEST REWARD: {}\n".format(r))
                     # Monitor the stiffness values
                     Kx_i += a[3]
                     Ky_i += a[4]
                     Kz_i += a[5]
-                    print("Integrated change in Kx :\n {}, Ky: {}, Kz: {}\n".format(Kx_i, Ky_i, Kz_i))
+                    #print("Integrated change in\n Kx: {}, Ky: {}, Kz: {}\n".format(Kx_i, Ky_i, Kz_i))
                     print("Current episode: {} \n Current length: {}\n".format(j,ep_len))
 
                 ep_ret += r
@@ -494,108 +504,117 @@ def sac(env_fn, actor_critic=CNNActorCritic, ac_kwargs=dict(), seed=0,
     total_steps = steps_per_epoch * epochs
     start_time = time.time()
     o, ep_ret, ep_len = env.reset(), 0, 0
-    time.sleep(wait_after_env_reset_time)
+    #time.sleep(wait_after_env_reset_time)
 
     # Main loop: collect experience in env and update/log each epoch
     for t in range(total_steps):
-        #try:
-            # Until start_steps have elapsed, randomly sample actions
-            # from a uniform distribution for better exploration. Afterwards, 
-            # use the learned policy.
-            if t > start_steps:
-                a = get_action(o)
-                
-            else:
-                a = env.action_space.sample()
-
-            # Step the env
-            o2, r, d, _ = env.step(a)
-
-            # Monitor the stiffness values and action command
-            if reward not 0:
-                print("Current Action command: \n {} \n".format(a))
-                print("\n REWARD: {}\n".format(r))
-                print("Current step: {}\n".format(t))
-                Kx_i += a[3]
-                Ky_i += a[4]
-                Kz_i += a[5]
-                print("Integrated change in Kx :\n {}, Ky: {}, Kz: {}\n".format(Kx_i, Ky_i, Kz_i))
-                
+    #try:
+        # Until start_steps have elapsed, randomly sample actions
+        # from a uniform distribution for better exploration. Afterwards, 
+        # use the learned policy.
+        action_from_actor = False
+        action_from_sampler = False
+        if t > start_steps:
+            a = get_action(o)
+            action_from_actor = True
             
-            # Monitor observation
-            """
-            plt.imshow(np.transpose(o2[0],(1,2,0)))
-            plt.show()
-            """
-            ep_ret += r
-            ep_len += 1
+        else:
+            action_from_sampler = True
+            a = env.action_space.sample()
 
-            # Ignore the "done" signal if it comes from hitting the time
-            # horizon (that is, when it's an artificial terminal signal
-            # that isn't based on the agent's state)
-            d = False if ep_len==max_ep_len else d
+        # Step the env
+        o2, r, d, _ = env.step(a)
 
-            # Store experience to replay buffer
-            replay_buffer.store(o, a, r, o2, d)
-
-            # Super critical, easy to overlook step: make sure to update 
-            # most recent observation!
-            o = o2
-
-            # End of trajectory handling
-            if d or (ep_len == max_ep_len):
-                if not DEBUG:
-                    logger.store(EpRet=ep_ret, EpLen=ep_len)
-                o, ep_ret, ep_len = env.reset(), 0, 0
-                time.sleep(wait_after_env_reset_time)
-
-            # Update handling
-            if t >= update_after and t % update_every == 0:
-                for j in range(update_every):
-                    batch = replay_buffer.sample_batch(batch_size)
-                    update(data=batch)
-
-            # End of epoch handling
-            if (t+1) % steps_per_epoch == 0:
-                epoch = (t+1) // steps_per_epoch
-
-                # Save model
-                if (epoch % save_freq == 0) or (epoch == epochs):
-                    if not DEBUG:
-                        logger.save_state({'env': env}, None)
-                print("+++++++++++++ Test Agent +++++++++++++")
-                # Test the performance of the deterministic version of the agent.
-                test_agent()
-
-                # Log info about epoch
-                if not DEBUG:
-                    print("-------------------------LOGGING EPOCH {}-------------------------".format(epoch))
-                    logger.log_tabular('Epoch', epoch)
-                # logger.log_tabuöar('Amount of Crashes', epoch=epoch)
-                    logger.log_tabular('EpRet', with_min_and_max=True, epoch=epoch)
-                    logger.log_tabular('TestEpRet', with_min_and_max=True, epoch=epoch)
-                    logger.log_tabular('EpLen', average_only=True, epoch=epoch)
-                    logger.log_tabular('TestEpLen', average_only=True, epoch=epoch)
-                    logger.log_tabular('TotalEnvInteracts', t, epoch=epoch)
-                    logger.log_tabular('Q1Vals', with_min_and_max=True, epoch=epoch)
-                    logger.log_tabular('Q2Vals', with_min_and_max=True, epoch=epoch)
-                    logger.log_tabular('LogPi', with_min_and_max=True, epoch=epoch)
-                    logger.log_tabular('LossPi', average_only=True, epoch=epoch)
-                    logger.log_tabular('LossQ', average_only=True, epoch=epoch)
-                    logger.log_tabular('Time', time.time()-start_time, epoch=epoch)
-                    logger.dump_tabular()
-        
-        #except:
+        # Monitor the stiffness values and action command
+        if r != 0:
+            #print("Current Action command: \n {} \n".format(a))
+            if action_from_actor:
+                print("the action came from ACTOR!! \n")
+            elif action_from_sampler:
+                print("the action came from SAMPLER!! \n")
+            #print("Current Action command: \n {} \n".format(a))
+            print("\n REWARD: {}\n".format(r))
+            Kx_i += a[3]
+            Ky_i += a[4]
+            Kz_i += a[5]
+            #print("Integrated change in \n Kx : {}, Ky: {}, Kz: {}\n".format(Kx_i, Ky_i, Kz_i))
+            
+        print("Current step: {}\n".format(t))
+        # Monitor observation
         """
+        plt.imshow(np.transpose(o2[0],(1,2,0)))
+        plt.show()
+        """
+        ep_ret += r
+        ep_len += 1
+
+        # Ignore the "done" signal if it comes from hitting the time
+        # horizon (that is, when it's an artificial terminal signal
+        # that isn't based on the agent's state)
+        d = False if ep_len==max_ep_len else d
+
+        # Store experience to replay buffer
+        replay_buffer.store(o, a, r, o2, d)
+
+        # Super critical, easy to overlook step: make sure to update 
+        # most recent observation!
+        o = o2
+
+        # End of trajectory handling
+        if d or (ep_len == max_ep_len):
+            if not DEBUG:
+                logger.store(EpRet=ep_ret, EpLen=ep_len)
+            o, ep_ret, ep_len = env.reset(), 0, 0
+            time.sleep(wait_after_env_reset_time)
+
+        # Update handling
+        if t >= update_after and t % update_every == 0:
+            for j in range(update_every):
+                batch = replay_buffer.sample_batch(batch_size)
+                update(data=batch)
+
+        # End of epoch handling
+        if (t+1) % steps_per_epoch == 0:
+            epoch = (t+1) // steps_per_epoch
+
+            # Save model
+            if (epoch % save_freq == 0) or (epoch == epochs):
+                if not DEBUG:
+                    logger.save_state({'env': env}, None)
+            print("+++++++++++++ Test Agent +++++++++++++")
+            # Test the performance of the deterministic version of the agent.
+            test_agent()
+
+            # Log info about epoch
+            if not DEBUG:
+                print("-------------------------LOGGING EPOCH {}-------------------------".format(epoch))
+                logger.log_tabular('Epoch', epoch)
+            # logger.log_tabuöar('Amount of Crashes', epoch=epoch)
+                logger.log_tabular('EpRet', with_min_and_max=True, epoch=epoch)
+                logger.log_tabular('TestEpRet', with_min_and_max=True, epoch=epoch)
+                logger.log_tabular('EpLen', average_only=True, epoch=epoch)
+                logger.log_tabular('TestEpLen', average_only=True, epoch=epoch)
+                logger.log_tabular('TotalEnvInteracts', t, epoch=epoch)
+                logger.log_tabular('Q1Vals', with_min_and_max=True, epoch=epoch)
+                logger.log_tabular('Q2Vals', with_min_and_max=True, epoch=epoch)
+                logger.log_tabular('LogPi', with_min_and_max=True, epoch=epoch)
+                logger.log_tabular('LossPi', average_only=True, epoch=epoch)
+                logger.log_tabular('LossQ', average_only=True, epoch=epoch)
+                logger.log_tabular('Time', time.time()-start_time, epoch=epoch)
+                logger.dump_tabular()   
+        """
+        except:
+            
             amount_of_crashes += 1
             print("--------------------------\n OH NO AN ERROR OCCURED: \n -----------------------")
             # Killall processes related to controller and sim
-            Popen("killall terminator && killall controller_peg_exe && killall sim_peg_exe", shell=True)
+            #Popen("killall terminator && killall controller_peg_exe && killall sim_peg_exe", shell=True)
             # Start processes in terminator window
-            Popen("terminator -e ./sim_peg_exe", shell=True, cwd='/home/msrm-student/sai2/apps/RobotLearningApp/bin/02-peg_in_hole')
-            time.sleep(5)
-            Popen("terminator --new-tab -e ./controller_peg_exe", shell=True,  cwd='/home/msrm-student/sai2/apps/RobotLearningApp/bin/02-peg_in_hole')
-            time.sleep(5)
+            #Popen("terminator -e ./sim_peg_exe", shell=True, cwd='/home/msrm-student/sai2/apps/RobotLearningApp/bin/02-peg_in_hole')
+            #time.sleep(5)
+            #Popen("terminator --new-tab -e ./controller_peg_exe", shell=True,  cwd='/home/msrm-student/sai2/apps/RobotLearningApp/bin/02-peg_in_hole')
+            #time.sleep(5)
             continue
         """
+            
 

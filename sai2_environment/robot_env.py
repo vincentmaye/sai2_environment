@@ -134,10 +134,8 @@ class RobotEnv(object):
             sleep_counter = 0
             while not self._client.action_complete():
                 sleep_counter += 1
-                time.sleep(3)
-                print("Sleep counter : {}\n".format(sleep_counter))
-                if time.time()-t0 > self.blocking_time:
-                    break 
+                time.sleep(0.01)
+
             if sleep_counter > 0:
                 reward, done = self._compute_reward()
             else:

@@ -35,9 +35,9 @@ class PegInHole(Task):
             # Staged reward depending on phase of task
             if np.linalg.norm(diff_ee_hole) <= self.epsilon1: # Alignment phase
                 reward = 1 + self.ca * (1 - np.linalg.norm(diff_ee_hole)/self.epsilon1)
-            elif diff_ee_hole[2] < 0: # if z-position smaller zero, meaning alignment done and insertion starts
-                reward = 2 + self.ci(self.hd - np.labs(diff_ee_hole[2]))
-            elif np.abs(self.hd - diff_ee_hole[2]) <= self.epsilon2:
+            elif (diff_ee_hole[2] < 0) and (np.linalg.norm(diff_ee_hole) <= self.epsilon1): # if z-position smaller zero, meaning alignment done and insertion starts
+                reward = 2 + self.ci*(self.hd - np.abs(diff_ee_hole[2]))
+            elif (np.abs(self.hd - diff_ee_hole[2]) <= self.epsilon2) and (np.linalg.norm(diff_ee_hole) <= self.epsilon1):
                 reward = 5
                 done = True
             else:
