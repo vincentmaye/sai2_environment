@@ -15,13 +15,13 @@ class PegInHole(Task):
             self.hole_pos[2] += 0.06 # adjust z-position such that it gives top of the hole
             self.current_ee_pos = self.get_current_pos() # returns bottom of peg
             # Hyperparameters for reward
-            self.lamda = 1 # Should equal max distance between peg and hole, assumed 1m, intentional typo here
+            self.lamda = 3 # Should be close to one when distance to goal is max
             self.ca = 1
             self.ci = 2
             self.cr = 1
-            self.epsilon1 = 0.05 # maximal reward in alignment stage when peg closer than 5cm to goal
+            self.epsilon1 = 0.03 # maximal reward in alignment stage when peg closer than 5cm to goal
             self.epsilon2 = 0.01 # success, when only 0.5cm away from max insertion depth
-            self.hd = 0.03 #depth of the hole in 3cm, peg can be inserted approx. 2.5cm
+            self.hd = 0.03 #depth of the hole is 3cm, peg can be inserted approx. 2.5cm
         else:
             #setup the things that we need in the real world
             self.goal_pos = None
