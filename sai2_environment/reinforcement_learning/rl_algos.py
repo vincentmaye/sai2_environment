@@ -27,6 +27,7 @@ Kx_i = 0
 Ky_i = 0
 Kz_i = 0
 
+device = torch.device('cuda')
 #*********************++++++++++++++++++++++++++++ SAC core +++++++++++++++++++++++++++++++************************#
 def combined_shape(length, shape=None):
     if shape is None:
@@ -50,7 +51,7 @@ class SquashedGaussianMLPActor(nn.Module):
         self.net = mlp([obs_dim] + list(hidden_sizes), activation, activation)
         self.mu_layer = nn.Linear(hidden_sizes[-1], act_dim)
         self.log_std_layer = nn.Linear(hidden_sizes[-1], act_dim)
-        self.act_limit = torch.as_tensor(act_limit, dtype = torch.float32)
+        self.act_limit = torch.as_tensor(act_limit, dtype = torch.float32, device = device)
 
     def forward(self, obs, deterministic=False, with_logprob=True):
         net_out = self.net(obs)
@@ -113,7 +114,7 @@ class MLPActorCritic(nn.Module):
         with torch.no_grad():
             a, _ = self.pi(obs, deterministic, False)
             print("TEST ACTION, MLPActorCritic Act: \n {}".format(a))
-            return a.numpy()
+            return a.cpu().numpy()
 
  # ----------------- Own Implementation of CONV Actor critic) -------------------------------------------------- #
 class CNNActorCritic(nn.Module):
@@ -127,22 +128,27 @@ class CNNActorCritic(nn.Module):
         act_limit = action_space.high
 
         self.cnn = CnnEncoder()
+        self.cnn = self.cnn.to(device)
         # Obs dim is output of conv network
         obs_dim = self.cnn.get_output_dim()
         # append robot state
         obs_dim += observation_space["state"][0]
         # build policy and value functions, make them work with CNN output
         self.actor = SquashedGaussianMLPActor(obs_dim, act_dim, hidden_sizes, activation, act_limit)
+        self.actor = self.actor.to(device)
         self.critic_1 = MLPQFunction(obs_dim, act_dim, hidden_sizes, activation)
+        self.critic_1 = self.critic_1.to(device)
         self.critic_2 = MLPQFunction(obs_dim, act_dim, hidden_sizes, activation)
+        self.critic_2 = self.critic_2.to(device)
 
     def act(self, obs, deterministic=False):
         with torch.no_grad():
-            feats = self.cnn(torch.as_tensor(obs[0], dtype=torch.float32).unsqueeze(0))#
-            state = torch.as_tensor(obs[1], dtype=torch.float32)
+            feats = self.cnn(torch.as_tensor(obs[0], dtype=torch.float32, device=device).unsqueeze(0))#
+            state = torch.as_tensor(obs[1], dtype=torch.float32, device = device)
             obs = torch.cat([feats.squeeze(0),state],-1)
             a, _ = self.actor(obs, deterministic, False)
-            return a.numpy()
+            a = a.cpu()
+            return a.cpu().numpy()
     
     def pi(self, obs, deterministic=False, with_logprob=True):
         feats = self.cnn(obs[0])
@@ -202,7 +208,8 @@ class CnnEncoder(nn.Module):
     def forward_conv(self, x):
         x = x / 255.
         x = self.encoder(x)
-        return x.view(x.size(0), -1)
+        #return x.view(x.size(0), -1)
+        return x.reshape(x.size(0), -1)
 
     def forward(self, x, detach = False):
         x = self.forward_conv(x)
@@ -264,10 +271,10 @@ class ReplayBuffer:
                      act=self.act_buf[idxs],
                      rew=self.rew_buf[idxs],
                      done=self.done_buf[idxs])
-        return {k: [torch.as_tensor(v[0], dtype=torch.float32),
-                    torch.as_tensor(v[1], dtype=torch.float32)]
+        return {k: [torch.as_tensor(v[0], dtype=torch.float32, device=device),
+                    torch.as_tensor(v[1], dtype=torch.float32, device=device)]
                     if k in ['obs', 'obs2']
-                    else torch.as_tensor(v, dtype=torch.float32)
+                    else torch.as_tensor(v, dtype=torch.float32, device=device)
                     for k,v in batch.items()}
 
 #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++#
@@ -284,13 +291,13 @@ def sac(env_fn, actor_critic=CNNActorCritic, ac_kwargs=dict(), seed=0,
     test = 1
     if test == 1:
         # 10% default values
-        steps_per_epoch = 400
-        epochs = 10
-        batch_size = 2
-        start_steps = 50
-        update_every = 20
-        update_after = 100
-        max_ep_len = 100
+        steps_per_epoch = 800
+        epochs = 100
+        batch_size = 64
+        start_steps = 400
+        update_every = 50
+        update_after = 200
+        max_ep_len = 250
         num_test_episodes = 2
     elif test == 2:
         # First test parameters
@@ -321,8 +328,7 @@ def sac(env_fn, actor_critic=CNNActorCritic, ac_kwargs=dict(), seed=0,
         max_ep_len = 55
         start_steps = 20
 
-    wait_after_env_reset_time = 3
-    amount_of_crashes = 0
+    wait_after_env_reset_time = 2
     #***************+++++++++++++++++++++++++++++++++++* FUNCTION DEFINITIONS **++++++++++++++++++++++++++++++++++++++++++++++******************
         # Set up function for computing SAC Q-losses
 
@@ -391,8 +397,8 @@ def sac(env_fn, actor_critic=CNNActorCritic, ac_kwargs=dict(), seed=0,
         loss_q = loss_q1 + loss_q2
 
         # Useful info for logging
-        q_info = dict(Q1Vals=q1.detach().numpy(),
-                      Q2Vals=q2.detach().numpy())
+        q_info = dict(Q1Vals=q1.detach().cpu().numpy(),
+                      Q2Vals=q2.detach().cpu().numpy())
 
         return loss_q, q_info
     ##################################################################################
@@ -411,7 +417,7 @@ def sac(env_fn, actor_critic=CNNActorCritic, ac_kwargs=dict(), seed=0,
         loss_pi = (alpha * logp_pi - q_pi).mean()
 
         # Useful info for logging
-        pi_info = dict(LogPi=logp_pi.detach().numpy())
+        pi_info = dict(LogPi=logp_pi.detach().cpu().numpy())
 
         return loss_pi, pi_info
 
@@ -425,26 +431,23 @@ def sac(env_fn, actor_critic=CNNActorCritic, ac_kwargs=dict(), seed=0,
         global Kx_i, Ky_i, Kz_i
         for j in range(num_test_episodes):
             o, d, ep_ret, ep_len = test_env.reset(), False, 0, 0
-            time.sleep(wait_after_env_reset_time)
-            while not(d or (ep_len == max_ep_len)):
-                # Take deterministic actions at test time 
-                a = get_action(o, True)
+            a = get_action(o, True)
 
-                # Test step the env
-                o, r, d, _ = test_env.step(a)
+            # Test step the env
+            o, r, d, _ = test_env.step(a)
 
-                if r != 0:
-                    #print(" Current TEST Action command: {} \n".format(a))
-                    print(" Action from CNN ACTOR: TEST REWARD: {}\n".format(r))
-                    # Monitor the stiffness values
-                    Kx_i += a[3]
-                    Ky_i += a[4]
-                    Kz_i += a[5]
-                    #print("Integrated change in\n Kx: {}, Ky: {}, Kz: {}\n".format(Kx_i, Ky_i, Kz_i))
-                    print("Current episode: {} \n Current length: {}\n".format(j,ep_len))
+            if r != 0:
+                #print(" Current TEST Action command: {} \n".format(a))
+                print(" Action from CNN ACTOR: TEST REWARD: {}\n".format(r))
+                # Monitor the stiffness values
+                Kx_i += a[3]
+                Ky_i += a[4]
+                Kz_i += a[5]
+                #print("Integrated change in\n Kx: {}, Ky: {}, Kz: {}\n".format(Kx_i, Ky_i, Kz_i))
+                print("Current episode: {} \n Current length: {}\n".format(j,ep_len))
 
-                ep_ret += r
-                ep_len += 1
+            ep_ret += r
+            ep_len += 1
             if not DEBUG:
                 logger.store(TestEpRet=ep_ret, TestEpLen=ep_len)
 
@@ -534,12 +537,12 @@ def sac(env_fn, actor_critic=CNNActorCritic, ac_kwargs=dict(), seed=0,
                 print("the action came from SAMPLER!! \n")
             #print("Current Action command: \n {} \n".format(a))
             print("\n REWARD: {}\n".format(r))
-            Kx_i += a[3]
-            Ky_i += a[4]
-            Kz_i += a[5]
+            #Kx_i += a[3]
+            #Ky_i += a[4]
+            #Kz_i += a[5]
             #print("Integrated change in \n Kx : {}, Ky: {}, Kz: {}\n".format(Kx_i, Ky_i, Kz_i))
             
-        print("Current step: {}\n".format(t))
+        #print("Current step: {}\n".format(t))
         # Monitor observation
         """
         plt.imshow(np.transpose(o2[0],(1,2,0)))
