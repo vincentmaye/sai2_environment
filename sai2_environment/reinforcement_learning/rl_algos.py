@@ -291,13 +291,13 @@ def sac(env_fn, actor_critic=CNNActorCritic, ac_kwargs=dict(), seed=0,
     test = 1
     if test == 1:
         # 10% default values
-        steps_per_epoch = 800
+        steps_per_epoch = 400
         epochs = 100
         batch_size = 64
-        start_steps = 400
+        start_steps = 100
         update_every = 50
-        update_after = 200
-        max_ep_len = 250
+        update_after = 100
+        max_ep_len =100
         num_test_episodes = 2
     elif test == 2:
         # First test parameters
@@ -431,26 +431,23 @@ def sac(env_fn, actor_critic=CNNActorCritic, ac_kwargs=dict(), seed=0,
         global Kx_i, Ky_i, Kz_i
         for j in range(num_test_episodes):
             o, d, ep_ret, ep_len = test_env.reset(), False, 0, 0
-            a = get_action(o, True)
-
-            # Test step the env
-            o, r, d, _ = test_env.step(a)
-
-            if r != 0:
-                #print(" Current TEST Action command: {} \n".format(a))
-                print(" Action from CNN ACTOR: TEST REWARD: {}\n".format(r))
-                # Monitor the stiffness values
-                Kx_i += a[3]
-                Ky_i += a[4]
-                Kz_i += a[5]
-                #print("Integrated change in\n Kx: {}, Ky: {}, Kz: {}\n".format(Kx_i, Ky_i, Kz_i))
-                print("Current episode: {} \n Current length: {}\n".format(j,ep_len))
-
-            ep_ret += r
-            ep_len += 1
+            while not(d or (ep_len == max_ep_len)):
+                a = get_action(o, True)
+                # Test step the env
+                o, r, d, _ = test_env.step(a)
+                if r != 0:
+                    #print(" Current TEST Action command: {} \n".format(a))
+                    print(" Action from CNN ACTOR: TEST REWARD: {}\n".format(r))
+                    # Monitor the stiffness values
+                    #Kx_i += a[3]
+                    #Ky_i += a[4]
+                    #Kz_i += a[5]
+                    #print("Integrated change in\n Kx: {}, Ky: {}, Kz: {}\n".format(Kx_i, Ky_i, Kz_i))
+                    print("Current test length: {}\n".format(ep_len))
+                ep_ret += r
+                ep_len += 1
             if not DEBUG:
                 logger.store(TestEpRet=ep_ret, TestEpLen=ep_len)
-
 
     # ******************+++++++++++++++++++++++++++++++++++++++++++++++ SAC MAIN START HERE +++++++++++++++++++++++++++++++++++++++++++*******************#
 
@@ -542,7 +539,7 @@ def sac(env_fn, actor_critic=CNNActorCritic, ac_kwargs=dict(), seed=0,
             #Kz_i += a[5]
             #print("Integrated change in \n Kx : {}, Ky: {}, Kz: {}\n".format(Kx_i, Ky_i, Kz_i))
             
-        #print("Current step: {}\n".format(t))
+        print("Current step: {}\n Current Epoch:{}\n".format(t,(t+1) // steps_per_epoch))
         # Monitor observation
         """
         plt.imshow(np.transpose(o2[0],(1,2,0)))
