@@ -18,6 +18,7 @@ from sai2_environment.reinforcement_learning.utils.logx import EpochLogger
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import sai2_environment.reinforcement_learning.networks as networks
+from sai2_environment.reinforcement_learning.utils.frame_stack import FrameStack
 
 from subprocess import Popen
 #*********************++++++++++++++++++++++++++++ Variables ++++++++++++++++++++++++++++++***********************#
@@ -28,6 +29,7 @@ Ky_i = 0
 Kz_i = 0
 
 device = torch.device('cuda')
+frame_stack_size = 4
 #*********************++++++++++++++++++++++++++++ SAC core +++++++++++++++++++++++++++++++************************#
 def combined_shape(length, shape=None):
     if shape is None:
@@ -398,7 +400,6 @@ def sac(env_fn, actor_critic=CNNActorCritic, ac_kwargs=dict(), seed=0,
 
         # Useful info for logging
         pi_info = dict(LogPi=logp_pi.detach().cpu().numpy())
-
         return loss_pi, pi_info
 
 
@@ -435,11 +436,17 @@ def sac(env_fn, actor_critic=CNNActorCritic, ac_kwargs=dict(), seed=0,
         logger = EpochLogger(**logger_kwargs)
         logger.save_config(locals())
 
+
     torch.manual_seed(seed)
     np.random.seed(seed)
 
-    # env, test_env = env_fn(), env_fn()
-    env, test_env = env_fn, env_fn
+    # Wrap the environment when more than 1 frame should be used
+    if frame_stack_size > 1:
+        env = FrameStack(env_fn, frame_stack_size)
+        test_env = env
+    else:
+        env, test_env = env_fn, env_fn
+
     obs_space = env.observation_space
     act_space = env.action_space
 
@@ -449,7 +456,7 @@ def sac(env_fn, actor_critic=CNNActorCritic, ac_kwargs=dict(), seed=0,
     obs_dim = (obs_space["center"],obs_space["state"]) #obs_dim = env.observation_space.shape
     act_dim = env.action_space.shape[0]
 
-    # Action limit for clamping: critically, assumes all dimensions share the same bound!
+    # Action limit for clamping: critically, assumes all dimensions share the same bound! <-- DOES NOT ASSUME SHARED LIMITS ANYMORE
     act_limit = env.action_space.high
 
     # Create actor-critic module and target networks
