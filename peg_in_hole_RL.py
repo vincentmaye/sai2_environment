@@ -14,7 +14,7 @@ from subprocess import Popen
 
 def main():
     # If Debug mode don't log
-    debug = False
+    debug = True
     # Parameters for MLP actor
     hid = 256
     l = 2
@@ -35,7 +35,7 @@ def main():
                    blocking_action=blocking_action,
                    rotation_axis=(0, 0, 1))    
     # Run SAC
-    sac(env, logger_kwargs = logger_kwargs, DEBUG=debug, ac_kwargs=ac_kwargs)
+    sac(env, logger_kwargs = logger_kwargs, debug=debug, ac_kwargs=ac_kwargs)
     """ env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, 
         steps_per_epoch=4000, epochs=100, replay_size=int(1e6), gamma=0.99, 
         polyak=0.995, lr=1e-3, alpha=0.2, batch_size=100, start_steps=10000, 

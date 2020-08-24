@@ -284,30 +284,21 @@ def sac(env_fn, actor_critic=CNNActorCritic, ac_kwargs=dict(), seed=0,
         steps_per_epoch=4000, epochs=100, replay_size=int(1e4), gamma=0.99, 
         polyak=0.995, lr=1e-3, alpha=0.2, batch_size=100, start_steps=10000, 
         update_after=1000, update_every=50, num_test_episodes=10, max_ep_len=1000, 
-        logger_kwargs=dict(), save_freq=1, DEBUG=False):
+        logger_kwargs=dict(), save_freq=1, debug=False):
 
     global Kx_i, Ky_i, Kz_i
     test = 1
     if test == 1:
         # 10% default values
-        steps_per_epoch = 400
+        steps_per_epoch = 600
         epochs = 100
-        batch_size = 64
-        start_steps = 100
-        update_every = 50
-        update_after = 100
-        max_ep_len =100
+        batch_size = 128
+        start_steps = 1000
+        update_every = 150
+        update_after = 300
+        max_ep_len = 200
         num_test_episodes = 2
     elif test == 2:
-        # First test parameters
-        epochs = 5000
-        steps_per_epoch = 120
-        num_test_episodes = 2
-        update_every = 300
-        update_after = 2000
-        max_ep_len = 1000
-        start_steps = 2000
-    elif test == 3:
         # Quick test parameters
         epochs = 1
         steps_per_epoch = 20
@@ -316,16 +307,6 @@ def sac(env_fn, actor_critic=CNNActorCritic, ac_kwargs=dict(), seed=0,
         update_after = 10
         max_ep_len = 15
         start_steps = 5
-
-    elif test == 4:
-        # Quick test parameters
-        epochs = 1
-        steps_per_epoch = 50
-        num_test_episodes = 2
-        update_every = 5
-        update_after = 40
-        max_ep_len = 55
-        start_steps = 20
 
     wait_after_env_reset_time = 0
     #***************+++++++++++++++++++++++++++++++++++* FUNCTION DEFINITIONS **++++++++++++++++++++++++++++++++++++++++++++++******************
@@ -340,7 +321,7 @@ def sac(env_fn, actor_critic=CNNActorCritic, ac_kwargs=dict(), seed=0,
         q_optimizer.step()
 
         # Record things
-        if not DEBUG:
+        if not debug:
             logger.store(LossQ=loss_q.item(), **q_info)
 
         # Freeze Q-networks so you don't waste computational effort 
@@ -359,7 +340,7 @@ def sac(env_fn, actor_critic=CNNActorCritic, ac_kwargs=dict(), seed=0,
             p.requires_grad = True
 
         # Record things
-        if not DEBUG:
+        if not debug:
             logger.store(LossPi=loss_pi.item(), **pi_info)
 
         # Finally, update target networks by polyak averaging.
@@ -445,12 +426,12 @@ def sac(env_fn, actor_critic=CNNActorCritic, ac_kwargs=dict(), seed=0,
                     print("Current test length: {}\n".format(ep_len))
                 ep_ret += r
                 ep_len += 1
-            if not DEBUG:
+            if not debug:
                 logger.store(TestEpRet=ep_ret, TestEpLen=ep_len)
 
     # ******************+++++++++++++++++++++++++++++++++++++++++++++++ SAC MAIN START HERE +++++++++++++++++++++++++++++++++++++++++++*******************#
 
-    if not DEBUG:
+    if not debug:
         logger = EpochLogger(**logger_kwargs)
         logger.save_config(locals())
 
@@ -487,8 +468,8 @@ def sac(env_fn, actor_critic=CNNActorCritic, ac_kwargs=dict(), seed=0,
     replay_buffer = ReplayBuffer(obs_dim=obs_dim, act_dim=act_dim, size=replay_size)
 
     # Count variables (protip: try to get a feel for how different size networks behave!)
-    var_counts = tuple(count_vars(module) for module in [ac.actor, ac.critic_1, ac.critic_1])
-    if not DEBUG:
+    var_counts = tuple(count_vars(module) for module in [ac.actor, ac.critic_1, ac.critic_2])
+    if not debug:
         logger.log('\nNumber of parameters: \t pi: %d, \t q1: %d, \t q2: %d\n'%var_counts)
 
     # Set up optimizers for policy and q-function
@@ -496,7 +477,7 @@ def sac(env_fn, actor_critic=CNNActorCritic, ac_kwargs=dict(), seed=0,
     q_optimizer = Adam(q_params, lr=lr)
 
     # Set up model saving
-    if not DEBUG:
+    if not debug:
         logger.setup_pytorch_saver(ac)
 
     # Prepare for interaction with environment
@@ -561,7 +542,7 @@ def sac(env_fn, actor_critic=CNNActorCritic, ac_kwargs=dict(), seed=0,
 
         # End of trajectory handling
         if d or (ep_len == max_ep_len):
-            if not DEBUG:
+            if not debug:
                 logger.store(EpRet=ep_ret, EpLen=ep_len)
             o, ep_ret, ep_len = env.reset(), 0, 0
             time.sleep(wait_after_env_reset_time)
@@ -578,14 +559,14 @@ def sac(env_fn, actor_critic=CNNActorCritic, ac_kwargs=dict(), seed=0,
 
             # Save model
             if (epoch % save_freq == 0) or (epoch == epochs):
-                if not DEBUG:
+                if not debug:
                     logger.save_state({'env': env}, None)
             print("+++++++++++++ Test Agent +++++++++++++")
             # Test the performance of the deterministic version of the agent.
             test_agent()
 
             # Log info about epoch
-            if not DEBUG:
+            if not debug:
                 print("-------------------------LOGGING EPOCH {}-------------------------".format(epoch))
                 logger.log_tabular('Epoch', epoch)
             # logger.log_tabuöar('Amount of Crashes', epoch=epoch)
