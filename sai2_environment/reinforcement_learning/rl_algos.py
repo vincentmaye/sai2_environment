@@ -147,7 +147,6 @@ class CNNActorCritic(nn.Module):
             state = torch.as_tensor(obs[1], dtype=torch.float32, device = device)
             obs = torch.cat([feats.squeeze(0),state],-1)
             a, _ = self.actor(obs, deterministic, False)
-            a = a.cpu()
             return a.cpu().numpy()
     
     def pi(self, obs, deterministic=False, with_logprob=True):
@@ -328,7 +327,7 @@ def sac(env_fn, actor_critic=CNNActorCritic, ac_kwargs=dict(), seed=0,
         max_ep_len = 55
         start_steps = 20
 
-    wait_after_env_reset_time = 2
+    wait_after_env_reset_time = 0
     #***************+++++++++++++++++++++++++++++++++++* FUNCTION DEFINITIONS **++++++++++++++++++++++++++++++++++++++++++++++******************
         # Set up function for computing SAC Q-losses
 
@@ -425,7 +424,7 @@ def sac(env_fn, actor_critic=CNNActorCritic, ac_kwargs=dict(), seed=0,
     def get_action(o, deterministic=False):
         #return ac.act(torch.as_tensor(o, dtype=torch.float32), 
         #             deterministic)
-        return ac.act(o)
+        return ac.act(o, deterministic)
 
     def test_agent():
         global Kx_i, Ky_i, Kz_i
