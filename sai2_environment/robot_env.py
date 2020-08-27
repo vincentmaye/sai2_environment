@@ -29,7 +29,8 @@ class RobotEnv(object):
                  blocking_action=False,
                  blocking_time=100.0,
                  camera_available=True,
-                 rotation_axis=(True, True, True)):
+                 rotation_axis=(True, True, True),
+                 observation_type = dict(camera=1, q=1, dq=1, tau=32, x=0, dx=0)):
 
         self.camera_available = camera_available
         # connect to redis server
@@ -61,11 +62,6 @@ class RobotEnv(object):
         self._client.init_action_space(self._robot_action)
         self._episodes = 0
 
-        self.observation_space = {
-            "state": self._client.get_robot_state().shape,
-            "center": (3, 128, 128)
-        }
-
         self.action_space = self._robot_action.action_space
         self.contact_event = False
         #self.camera_handler = CameraHandler(self.env_config['camera_resolution'])
@@ -81,6 +77,28 @@ class RobotEnv(object):
             self.contact_thread.start()
             if self.camera_available:
                 self.camera_thread.start()
+        
+        # Validate dict entries
+        observation_validations={
+            "camera": lambda x: isinstance (x, int) and (x==0 or x==1),
+            "q": lambda x: isinstance (x, int) and (x==0 or x==1),
+            "dq": lambda x: isinstance (x, int) and (x==0 or x==1),
+            "tau": lambda x: isinstance (x, int) and 0<=x<=1000,
+            "x": lambda x: isinstance (x, int) and (x==0 or x==1),
+            "dx": lambda x: isinstance (x, int) and (x==0 or x==1),
+        }
+        for k,v in observation_type.items():
+            if not observation_validations[k](v):
+                print("Key {} has wrong type or value, should be int".format(k))
+                raise TypeError
+
+        # Defines which types of observations should be returned
+        self.observation_type = observation_type
+
+        self.observation_space = {
+            "state": self._get_obs()[1].shape,
+            "center": (3, 128, 128)
+        }
 
     def reset(self):
         self._client.reset(self._episodes)              
@@ -101,11 +119,11 @@ class RobotEnv(object):
             robot_state[-1] = self.contact_event
         return robot_state
 
-    def get_contact(self):
-        while True:
-            contact = self._client.get_contact_occurence()
-            self.contact_event = True if contact.any() else self.contact_event
-            #print("contact=", contact)
+    def get_contact(self):            
+        self.goal_pos = None
+        self.hole_pos = Nonent.get_contact_occurence()
+        self.contact_event = True if contact.any() else self.contact_event
+        #print("contact=", contact)
 
     def rotvec_to_quaternion(self, vec):
         quat = Rot.from_euler('zyx', vec).as_quat()
@@ -169,8 +187,15 @@ class RobotEnv(object):
 
     def _get_obs(self):
         if self.env_config['simulation']:
-            camera_frame = self.convert_image(self._client.get_camera_frame())
+            camera_frame = self.convert_image(self._client.get_camera_frame()) if self.observation_type['camera'] else 0
             robot_state = self.get_normalized_robot_state()
+            if self.observation_type['q']  == 0 : robot_state[:7]    = 0
+            if self.observation_type['dq'] == 0 : robot_state[7:14]  = 0
+            if self.observation_type['tau']== 0 : robot_state[14:21] = 0
+            if self.observation_type['x']  == 0 : robot_state[21:24] = 0
+            if self.observation_type['dx'] == 0 : robot_state[24:27] = 0
+            robot_state = robot_state[robot_state != 0]
+
         else:
             camera_frame = self.convert_image(self.camera_handler.get_color_frame()) if self.camera_available else 0
             robot_state = self.get_normalized_robot_state()

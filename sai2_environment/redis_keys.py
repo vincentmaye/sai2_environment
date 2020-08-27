@@ -18,6 +18,8 @@ class RedisKeys(object):
             self.SENSED_CONTACT_KEY = "sai2::PandaApplication::sensors::contact"
 
             self.HARD_RESET_SIMULATOR_KEY = "sai2::ReinforcementLearning::hard_reset_simulator"
+            self.CURRENT_POS_KEY = "sai2::ReinforcementLearning::current_position"
+            self.CURRENT_VEL_KEY = "sai2::ReinforcementLearning::current_velocity"
 
         else:        
             self.JOINT_TORQUES_COMMANDED_KEY = "sai2::FrankaPanda::actuators::fgc"
