@@ -48,18 +48,18 @@ class RedisClient(object):
         return self.redis2array(self.get(self.keys.SENSED_CONTACT_KEY))
 
     def get_robot_state(self) -> np.array:
-        q = self.redis2array(self.get(self.keys.JOINT_ANGLES_KEY))
-        dq = self.redis2array(self.get(self.keys.JOINT_VELOCITIES_KEY))
-        tau = self.redis2array(self.get(
-            self.keys.JOINT_TORQUES_COMMANDED_KEY))
-
+        q   = self.redis2array(self.get(self.keys.JOINT_ANGLES_KEY))
+        dq  = self.redis2array(self.get(self.keys.JOINT_VELOCITIES_KEY))
+        tau = self.redis2array(self.get(self.keys.JOINT_TORQUES_COMMANDED_KEY))
+        x   = self.redis2array(self.get(self.keys.CURRENT_POS_KEY))
+        dx  = self.redis2array(self.get(self.keys.CURRENT_VEL_KEY))
         if self._config["simulation"]:
             contact = self.redis2array(self.get(self.keys.SENSED_CONTACT_KEY))
         else:
             #TODO No force sensor on robot, need to use the sensed torques 
             contact = np.array([0])
 
-        return np.append(np.concatenate([q, dq, tau]), contact)
+        return np.append(np.concatenate([q, dq, tau, x, dx]), contact)
 
     def redis2array(self, serialized_arr: str) -> np.array:
         return np.array(json.loads(serialized_arr))

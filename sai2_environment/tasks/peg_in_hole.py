@@ -15,7 +15,7 @@ class PegInHole(Task):
             self.hole_pos[2] += 0.06 # adjust z-position such that it gives top of the hole
             self.current_ee_pos = self.get_current_pos() # returns bottom of peg
             # Hyperparameters for reward
-            self.lamda = 3 # Should be close to one when distance to goal is max
+            self.lamda = 7 
             self.ca = 1
             self.ci = 2
             self.cr = 1
