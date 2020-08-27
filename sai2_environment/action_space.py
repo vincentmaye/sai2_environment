@@ -29,6 +29,8 @@ class ActionSpace(Enum):
     ABS_EE_POSE_IMPEDANCE = 212
     DELTA_EE_POSE_IMPEDANCE = 222
 
+    MT_EE_POSE_IMPEDANCE = 232
+
 
 def get_robot_action(action_space_enum, isotropic_gains, rotation_axis):
     if action_space_enum.value // 10**2 % 10 == 1:
@@ -98,7 +100,7 @@ class TaskSpaceAction(RobotAction):
                                        [500, 500, 500, 10, 10, 10])
 
         else:  #delta position
-            x_min = np.array([-0.2, -0.2, -0.2])
+            x_min = np.array([-0.1, -0.1, -0.1])
             x_max = -1 * x_min
 
             R_min = -0.1 * np.ones((rot_dim, ))
