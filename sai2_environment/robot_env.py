@@ -29,10 +29,12 @@ class RobotEnv(object):
                  action_frequency=20,
                  torque_seq_length=32,
                  camera_available=True,
+                 camera_res = (128, 128),
                  rotation_axis=(True, True, True),
                  observation_type = dict(camera=1, q=1, dq=1, tau=32, x=0, dx=0)):
-                 camera_res = (128, 128),
-                 rotation_axis=(True, True, True)):
+
+        # Defines which types of observations should be returned
+        self.observation_type = observation_type
 
         self.camera_available = camera_available
         # connect to redis server
@@ -88,15 +90,7 @@ class RobotEnv(object):
             "proprioception": proprio.shape,
             "haptic": (haptic[0].shape, haptic[1].shape)
         }
-
-        #self.camera_thread = threading.Thread(name="camera_thread", target= self.camera_handler.start_pipeline)
-        self.contact_thread = threading.Thread(name="contact_thread", target= self.get_contact)
-        
-        if not self.env_config["simulation"]:
-            self.contact_thread.start()
-            if self.camera_available:
-                self.camera_thread.start()
-        
+       
         # Validate dict entries
         observation_validations={
             "camera": lambda x: isinstance (x, int) and (x==0 or x==1),
@@ -104,20 +98,13 @@ class RobotEnv(object):
             "dq": lambda x: isinstance (x, int) and (x==0 or x==1),
             "tau": lambda x: isinstance (x, int) and 0<=x<=1000,
             "x": lambda x: isinstance (x, int) and (x==0 or x==1),
-            "dx": lambda x: isinstance (x, int) and (x==0 or x==1),
-        }
+            "dx": lambda x: isinstance (x, int) and (x==0 or x==1)}
+
         for k,v in observation_type.items():
             if not observation_validations[k](v):
                 print("Key {} has wrong type or value, should be int".format(k))
                 raise TypeError
 
-        # Defines which types of observations should be returned
-        self.observation_type = observation_type
-
-        self.observation_space = {
-            "state": self._get_obs()[1].shape,
-            "center": (3, 128, 128)
-        }
         # TODO define what all the responsibilites of task are
         task_class = name_to_task_class(name)
         self.task = task_class(
@@ -163,13 +150,15 @@ class RobotEnv(object):
             # self._client.action_complete()))
             self.take_action(action)
             time.sleep(0.01)
+            sleep_counter = 0
             while not self._client.action_complete():
+                sleep_counter += 1
                 time.sleep(0.01)
 
             if sleep_counter > 0:
                 reward, done = self._compute_reward()
             else:
-                reward, done = 0, False
+                reward = 0; done = False
             
 
         # non-blocking does not wait and computes reward right away
@@ -208,40 +197,37 @@ class RobotEnv(object):
         """
         camera_frame: im = (128,128)
         robot_state: (q,dq) = (14,)
+        robot_state_cartesian: (x,dx) = (6,)
         haptic_feedback: (tau, contact) = ((7,n), (1,))
         """
         if self.env_config['simulation']:
-            camera_frame = self.convert_image(self._client.get_camera_frame()) if self.observation_type['camera'] else 0
-            robot_state = self.get_normalized_robot_state()
-            if self.observation_type['q']  == 0 : robot_state[:7]    = 0
-            if self.observation_type['dq'] == 0 : robot_state[7:14]  = 0
-            if self.observation_type['tau']== 0 : robot_state[14:21] = 0
-            if self.observation_type['x']  == 0 : robot_state[21:24] = 0
-            if self.observation_type['dx'] == 0 : robot_state[24:27] = 0
-            robot_state = robot_state[robot_state != 0]
-
-            img = self._client.get_camera_frame()
+            img = self._client.get_camera_frame() if self.observation_type['camera'] else 0
             camera_frame = self.convert_image(img)
         else:
             img = self.camera_handler.get_color_frame() if self.camera_available else 0
             camera_frame = self.convert_image(img)
                 
         # retrieve robot state
-        q, dq = self._client.get_robot_state()        
+        q, dq, x, dx = self._client.get_robot_state()        
         # normalize proprioception
         q = self.scaler.q_scaler.transform([q])[0]
         dq = self.scaler.dq_scaler.transform([dq])[0]
 
         #retrieve haptics
-        tau = self.haptic_handler.get_torques_matrix(n=self.env_config["torque_seq_length"])
+        #tau = self.haptic_handler.get_torques_matrix(n=self.env_config["torque_seq_length"])
+        reversed__transposed_tau = np.array([0])
         contact = np.asarray([self.haptic_handler.contact_occured()])
         #normalize haptics
-        tau = self.scaler.tau_scaler.transform(tau)
-        reversed__transposed_tau = np.transpose(tau[::-1])
-        normalized_robot_state = np.concatenate((q, dq))
+        #tau = self.scaler.tau_scaler.transform(tau)
+        #reversed__transposed_tau = np.transpose(tau[::-1])
 
-        normalized_robot_state = np.concatenate((q, dq))
+        #concatenate only state information which is demanded by observation_type
+        normalized_robot_state = np.array([])
+        if self.observation_type['q']: normalized_robot_state = np.concatenate((normalized_robot_state,q)) 
+        if self.observation_type['dq']: normalized_robot_state = np.concatenate((normalized_robot_state,dq))
+        if self.observation_type['x']: normalized_robot_state = np.concatenate((normalized_robot_state,x))
+        if self.observation_type['dx']: normalized_robot_state = np.concatenate((normalized_robot_state,dx))
+
         normalized_haptic_feedback = (reversed__transposed_tau, contact)
         self.render(img)
         return camera_frame, normalized_robot_state, normalized_haptic_feedback
-

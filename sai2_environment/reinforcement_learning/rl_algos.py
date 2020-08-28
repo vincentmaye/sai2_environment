@@ -29,7 +29,7 @@ Ky_i = 0
 Kz_i = 0
 
 device = torch.device('cuda')
-frame_stack_size = 4
+frame_stack_size = 1
 #*********************++++++++++++++++++++++++++++ SAC core +++++++++++++++++++++++++++++++************************#
 def combined_shape(length, shape=None):
     if shape is None:
@@ -103,7 +103,7 @@ class MLPActorCritic(nn.Module):
         super().__init__()
 
         #obs_dim = observation_space.shape[0]
-        obs_dim = observation_space['center']
+        obs_dim = observation_space['proprioception']
         act_dim = action_space.shape[0]
         act_limit = action_space.high
 
@@ -134,7 +134,7 @@ class CNNActorCritic(nn.Module):
         # Obs dim is output of conv network
         obs_dim = self.cnn.get_output_dim()
         # append robot state
-        obs_dim += observation_space["state"][0]
+        obs_dim += observation_space["proprioception"][0]
         # build policy and value functions, make them work with CNN output
         self.actor = SquashedGaussianMLPActor(obs_dim, act_dim, hidden_sizes, activation, act_limit)
         self.actor = self.actor.to(device)
@@ -310,7 +310,6 @@ def sac(env_fn, actor_critic=CNNActorCritic, ac_kwargs=dict(), seed=0,
         max_ep_len = 15
         start_steps = 5
 
-    wait_after_env_reset_time = 0
     #***************+++++++++++++++++++++++++++++++++++* FUNCTION DEFINITIONS **++++++++++++++++++++++++++++++++++++++++++++++******************
         # Set up function for computing SAC Q-losses
 
@@ -453,7 +452,7 @@ def sac(env_fn, actor_critic=CNNActorCritic, ac_kwargs=dict(), seed=0,
     # Plot observation
     #plt.imshow(obs_space{'center'})   
 
-    obs_dim = (obs_space["center"],obs_space["state"]) #obs_dim = env.observation_space.shape
+    obs_dim = (obs_space["camera"],obs_space["proprioception"]) #obs_dim = env.observation_space.shape
     act_dim = env.action_space.shape[0]
 
     # Action limit for clamping: critically, assumes all dimensions share the same bound! <-- DOES NOT ASSUME SHARED LIMITS ANYMORE
@@ -491,11 +490,8 @@ def sac(env_fn, actor_critic=CNNActorCritic, ac_kwargs=dict(), seed=0,
     total_steps = steps_per_epoch * epochs
     start_time = time.time()
     o, ep_ret, ep_len = env.reset(), 0, 0
-    #time.sleep(wait_after_env_reset_time)
-
     # Main loop: collect experience in env and update/log each epoch
     for t in range(total_steps):
-    #try:
         # Until start_steps have elapsed, randomly sample actions
         # from a uniform distribution for better exploration. Afterwards, 
         # use the learned policy.
@@ -511,7 +507,7 @@ def sac(env_fn, actor_critic=CNNActorCritic, ac_kwargs=dict(), seed=0,
 
         # Step the env
         o2, r, d, _ = env.step(a)
-
+        
         # Monitor the stiffness values and action command
         if r != 0:
             #print("Current Action command: \n {} \n".format(a))
@@ -552,7 +548,6 @@ def sac(env_fn, actor_critic=CNNActorCritic, ac_kwargs=dict(), seed=0,
             if not debug:
                 logger.store(EpRet=ep_ret, EpLen=ep_len)
             o, ep_ret, ep_len = env.reset(), 0, 0
-            time.sleep(wait_after_env_reset_time)
 
         # Update handling
         if t >= update_after and t % update_every == 0:
@@ -589,19 +584,6 @@ def sac(env_fn, actor_critic=CNNActorCritic, ac_kwargs=dict(), seed=0,
                 logger.log_tabular('LossQ', average_only=True, epoch=epoch)
                 logger.log_tabular('Time', time.time()-start_time, epoch=epoch)
                 logger.dump_tabular()   
-        """
-        except:
-            
-            amount_of_crashes += 1
-            print("--------------------------\n OH NO AN ERROR OCCURED: \n -----------------------")
-            # Killall processes related to controller and sim
-            #Popen("killall terminator && killall controller_peg_exe && killall sim_peg_exe", shell=True)
-            # Start processes in terminator window
-            #Popen("terminator -e ./sim_peg_exe", shell=True, cwd='/home/msrm-student/sai2/apps/RobotLearningApp/bin/02-peg_in_hole')
-            #time.sleep(5)
-            #Popen("terminator --new-tab -e ./controller_peg_exe", shell=True,  cwd='/home/msrm-student/sai2/apps/RobotLearningApp/bin/02-peg_in_hole')
-            #time.sleep(5)
-            continue
-        """
+
             
 

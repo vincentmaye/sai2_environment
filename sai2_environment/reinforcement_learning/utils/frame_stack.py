@@ -7,8 +7,8 @@ class FrameStack():
         self._k = k
         self._frames = deque([], maxlen=k)
         self.observation_space ={
-            "state": env.observation_space["state"],
-            "center": (k, *env.observation_space["center"])
+            "proprioception": env.observation_space["proprioception"],
+            "camera": (k, *env.observation_space["camera"])
         }
         self.action_space = env.action_space
 

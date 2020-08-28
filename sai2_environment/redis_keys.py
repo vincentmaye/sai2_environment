@@ -22,6 +22,8 @@ class RedisKeys(object):
             self.CURRENT_POS_KEY = "sai2::ReinforcementLearning::current_position"
             self.CURRENT_VEL_KEY = "sai2::ReinforcementLearning::current_velocity"
 
+            self.CURRENT_POS_PEG_KEY = "sai2::ReinforcementLearning::peg_in_hole::current_position_peg"
+
         else:        
             self.JOINT_TORQUES_COMMANDED_KEY = "sai2::FrankaPanda::actuators::fgc"
             self.JOINT_ANGLES_KEY  = "sai2::FrankaPanda::sensors::q"

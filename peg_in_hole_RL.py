@@ -13,12 +13,12 @@ from sai2_environment.reinforcement_learning.rl_algos import sac
 
 def main():
     # If Debug mode don't log
-    debug = True
+    debug = False
     # Parameters for MLP actor
     hid = 256
     l = 2
     #*** Stuff from OpenAI ***#
-    logger_kwargs = setup_logger_kwargs("peg_in_hole_test", 0, datestamp=True, data_dir='sai2_environment/reinforcement_learning/logs/') # Vars: exp_name, seed
+    logger_kwargs = setup_logger_kwargs("peg_in_hole_test", 0, datestamp=True, data_dir='sai2_environment/logs/') # Vars: exp_name, seed
     ac_kwargs = dict(hidden_sizes=[hid]*l)
     torch.set_num_threads(torch.get_num_threads())
 

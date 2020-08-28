@@ -4,16 +4,17 @@ import numpy as np
 #Reward based on Vision and Touch paper: https://arxiv.org/pdf/1907.13098.pdf
 
 class PegInHole(Task):
-    def __init__(self, task_name, redis_client, simulation=True):
+    def __init__(self, task_name, redis_client, camera_handler, simulation=True):
         self._task_name = task_name
         self._client = redis_client
         self._simulation = simulation
-        self.ROBOT_POS_EE_KEY = "sai2::PandaApplication::peg_in_hole::robot_pos_ee"; # Will return bottom of peg
+        self.camera_handler = camera_handler
+        self.CURRENT_POS_KEY = "sai2::ReinforcementLearning::current_position"
         self.GOAL_POS_KEY  = "sai2::ReinforcementLearning::move_object_to_target::goal_position"
         if simulation:
             self.hole_pos = self._client.redis2array(self._client.get(self.GOAL_POS_KEY))
             self.hole_pos[2] += 0.06 # adjust z-position such that it gives top of the hole
-            self.current_ee_pos = self.get_current_pos() # returns bottom of peg
+            self.current_peg_pos = self.get_current_peg_pos() # returns bottom of peg
             # Hyperparameters for reward
             self.lamda = 7 
             self.ca = 1
@@ -29,8 +30,8 @@ class PegInHole(Task):
 
     def compute_reward(self):
         if self._simulation:
-            self.current_ee_pos = self.get_current_pos()
-            diff_ee_hole = self.current_ee_pos - self.hole_pos # called s in the paper
+            self.current_peg_pos = self.get_current_peg_pos()
+            diff_ee_hole = self.current_peg_pos - self.hole_pos # called s in the paper
             done = False
             # Staged reward depending on phase of task
             if np.linalg.norm(diff_ee_hole) <= self.epsilon1: # Alignment phase
@@ -53,6 +54,9 @@ class PegInHole(Task):
     def euclidean_distance(self, x1, x2):
         return np.linalg.norm(x1 - x2)
 
-    def get_current_pos(self):
-        return self._client.redis2array(self._client.get(self.ROBOT_POS_EE_KEY)) # returns pos of the peg bottom
+    def get_current_peg_pos(self):
+        return self._client.redis2array(self._client.get(self.CURRENT_POS_KEY)) # returns pos of the peg bottom
 
+    def initialize_task(self):
+        #nothing has to happen here
+        return
