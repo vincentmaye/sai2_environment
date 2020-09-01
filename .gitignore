@@ -27,8 +27,7 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
-librealsense/
-.vscode
+
 # PyInstaller
 #  Usually these files are written by a python script from a template
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
@@ -38,8 +37,7 @@ librealsense/
 # Installer logs
 pip-log.txt
 pip-delete-this-directory.txt
-logs/
-reinforcement_learning/logs
+
 # Unit test / coverage reports
 htmlcov/
 .tox/
@@ -104,13 +102,6 @@ celerybeat.pid
 # SageMath parsed files
 *.sage.py
 
-# Other repositories
-spinningup/
-baselines/
-RWHEC-Tabb-AhmadYousef/
-Peg_in_hole_assembly/
-spinup/
-.vscode/
 # Environments
 .env
 .venv
@@ -137,7 +128,3 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-
-# Dont push images
-*.png
-*.jpg

@@ -49,8 +49,7 @@ class RedisClient(object):
         sensed_contact = self.redis2array(self.get(self.keys.SENSED_CONTACT_KEY))
         if not self._simulation:
             sensed_contact = sensed_contact.any()
-        return sensed_contact
-        
+        return sensed_contact        
 
     def get_torques(self):
         return self.redis2array(self.get(
