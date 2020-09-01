@@ -2,13 +2,10 @@
 from copy import deepcopy
 import itertools
 import numpy as np
-import scipy.signal
-from gym.spaces import Box, Discrete
 import time
 
 import torch
 from torch.optim import Adam
-from torch.distributions.categorical import Categorical
 from torch.distributions.normal import Normal
 import torch.nn as nn
 import torch.nn.functional as F
@@ -16,20 +13,20 @@ import torch.nn.functional as F
 from sai2_environment.reinforcement_learning.utils.logx import EpochLogger
 
 import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
 import sai2_environment.reinforcement_learning.networks as networks
 from sai2_environment.reinforcement_learning.utils.frame_stack import FrameStack
-
-from subprocess import Popen
 #*********************++++++++++++++++++++++++++++ Variables ++++++++++++++++++++++++++++++***********************#
 LOG_STD_MAX = 2
 LOG_STD_MIN = -20
-Kx_i = 0
-Ky_i = 0
-Kz_i = 0
 
-device = torch.device('cuda')
-frame_stack_size = 1
+if torch.cuda.is_available():
+    device = torch.device('cuda')
+else:
+    device = torch.device('cpu')
+
+frame_stack_size = 4
+succ_env_itr = 0
+succ_test_env_itr = 0
 #*********************++++++++++++++++++++++++++++ SAC core +++++++++++++++++++++++++++++++************************#
 def combined_shape(length, shape=None):
     if shape is None:
@@ -72,10 +69,6 @@ class SquashedGaussianMLPActor(nn.Module):
 
         if with_logprob:
             # Compute logprob from Gaussian, and then apply correction for Tanh squashing.
-            # NOTE: The correction formula is a little bit magic. To get an understanding 
-            # of where it comes from, check out the original SAC paper (arXiv 1801.01290) 
-            # and look in appendix C. This is a more numerically-stable equivalent to Eq 21.
-            # Try deriving it yourself as a (very difficult) exercise. :)
             logp_pi = pi_distribution.log_prob(pi_action).sum(axis=-1)
             logp_pi -= (2*(np.log(2) - pi_action - F.softplus(-2*pi_action))).sum(axis=1)
         else:
@@ -117,58 +110,6 @@ class MLPActorCritic(nn.Module):
             a, _ = self.pi(obs, deterministic, False)
             print("TEST ACTION, MLPActorCritic Act: \n {}".format(a))
             return a.cpu().numpy()
-
- # ----------------- Own Implementation of CONV Actor critic) -------------------------------------------------- #
-class CNNActorCritic(nn.Module):
-
-    def __init__(self, observation_space, action_space, hidden_sizes=(256,256),
-                 activation=nn.ReLU):
-        super().__init__()
-
-        #obs_dim = observation_space.shape[0]
-        act_dim = action_space.shape[0]
-        act_limit = action_space.high
-
-        self.cnn = CnnEncoder()
-        self.cnn = self.cnn.to(device)
-        # Obs dim is output of conv network
-        obs_dim = self.cnn.get_output_dim()
-        # append robot state
-        obs_dim += observation_space["proprioception"][0]
-        # build policy and value functions, make them work with CNN output
-        self.actor = SquashedGaussianMLPActor(obs_dim, act_dim, hidden_sizes, activation, act_limit)
-        self.actor = self.actor.to(device)
-        self.critic_1 = MLPQFunction(obs_dim, act_dim, hidden_sizes, activation)
-        self.critic_1 = self.critic_1.to(device)
-        self.critic_2 = MLPQFunction(obs_dim, act_dim, hidden_sizes, activation)
-        self.critic_2 = self.critic_2.to(device)
-
-    def act(self, obs, deterministic=False):
-        with torch.no_grad():
-            feats = self.cnn(torch.as_tensor(obs[0], dtype=torch.float32, device=device).unsqueeze(0))#
-            state = torch.as_tensor(obs[1], dtype=torch.float32, device = device)
-            obs = torch.cat([feats.squeeze(0),state],-1)
-            a, _ = self.actor(obs, deterministic, False)
-            return a.cpu().numpy()
-    
-    def pi(self, obs, deterministic=False, with_logprob=True):
-        feats = self.cnn(obs[0])
-        state = obs[1]
-        obs = torch.cat([feats,state],-1)
-        return self.actor(obs, deterministic, with_logprob)
-
-    def q1(self, obs, act):
-        feats = self.cnn(obs[0])
-        state = obs[1]
-        obs = torch.cat([feats,state],-1)
-        return self.critic_1(obs,act)
-
-    def q2(self, obs, act):
-        feats = self.cnn(obs[0])
-        state = obs[1]
-        obs = torch.cat([feats,state],-1)
-        return self.critic_2(obs,act)
-
 
 
 class CnnEncoder(nn.Module):
@@ -234,6 +175,58 @@ class CnnEncoder(nn.Module):
             if type(module) != nn.Sequential:
                 i += 1
 
+
+ # ----------------- Own Implementation of CONV Actor critic) -------------------------------------------------- #
+class CNNActorCritic(nn.Module):
+
+    def __init__(self, observation_space, action_space, hidden_sizes=(256,256),
+                 activation=nn.ReLU):
+        super().__init__()
+
+        #obs_dim = observation_space.shape[0]
+        act_dim = action_space.shape[0]
+        act_limit = action_space.high
+        
+        self.cnn = CnnEncoder(observation_space['camera'][0]*observation_space['camera'][1])
+        self.cnn = self.cnn.to(device)
+        # Obs dim is output of conv network
+        obs_dim = self.cnn.get_output_dim()
+        # append robot state
+        obs_dim += observation_space["proprioception"][0]
+        # build policy and value functions, make them work with CNN output
+        self.actor = SquashedGaussianMLPActor(obs_dim, act_dim, hidden_sizes, activation, act_limit).to(device)
+        self.critic_1 = MLPQFunction(obs_dim, act_dim, hidden_sizes, activation).to(device)
+        self.critic_2 = MLPQFunction(obs_dim, act_dim, hidden_sizes, activation).to(device)
+
+    def act(self, obs, deterministic=False):
+        with torch.no_grad():
+            feats = self.cnn(torch.as_tensor(obs[0], dtype=torch.float32, device=device).unsqueeze(0))
+            state = torch.as_tensor(obs[1], dtype=torch.float32, device = device)
+            obs = torch.cat([feats.squeeze(0),state],-1)
+            a, _ = self.actor(obs, deterministic, False)
+            return a.cpu().numpy()
+    
+    def pi(self, obs, deterministic=False, with_logprob=True):
+        feats = self.cnn(obs[0])
+        state = obs[1]
+        obs = torch.cat([feats,state],-1)
+        return self.actor(obs, deterministic, with_logprob)
+
+    def q1(self, obs, act):
+        feats = self.cnn(obs[0])
+        state = obs[1]
+        obs = torch.cat([feats,state],-1)
+        return self.critic_1(obs,act)
+
+    def q2(self, obs, act):
+        feats = self.cnn(obs[0])
+        state = obs[1]
+        obs = torch.cat([feats,state],-1)
+        return self.critic_2(obs,act)
+
+
+
+
     
 #***********************+++++++++++++++++ REPLAY BUFFER FROM sac.py ++++++++++++++++++++***************************#
 class ReplayBuffer:
@@ -288,18 +281,19 @@ def sac(env_fn, actor_critic=CNNActorCritic, ac_kwargs=dict(), seed=0,
         update_after=1000, update_every=50, num_test_episodes=10, max_ep_len=1000, 
         logger_kwargs=dict(), save_freq=1, debug=False):
 
-    global Kx_i, Ky_i, Kz_i
     test = 1
     if test == 1:
-        # 10% default values
+        # Current training settings
         steps_per_epoch = 600
         epochs = 100
+        replay_size=int(1e4)
+        lr=1e-3
         batch_size = 128
         start_steps = 1000
-        update_every = 150
         update_after = 300
-        max_ep_len = 200
+        update_every = 150
         num_test_episodes = 2
+        max_ep_len = 200
     elif test == 2:
         # Quick test parameters
         epochs = 1
@@ -403,12 +397,10 @@ def sac(env_fn, actor_critic=CNNActorCritic, ac_kwargs=dict(), seed=0,
 
 
     def get_action(o, deterministic=False):
-        #return ac.act(torch.as_tensor(o, dtype=torch.float32), 
-        #             deterministic)
+        #return ac.act(torch.as_tensor(o, dtype=torch.float32), deterministic)
         return ac.act(o, deterministic)
 
     def test_agent():
-        global Kx_i, Ky_i, Kz_i
         for j in range(num_test_episodes):
             o, d, ep_ret, ep_len = test_env.reset(), False, 0, 0
             while not(d or (ep_len == max_ep_len)):
@@ -416,14 +408,9 @@ def sac(env_fn, actor_critic=CNNActorCritic, ac_kwargs=dict(), seed=0,
                 # Test step the env
                 o, r, d, _ = test_env.step(a)
                 if r != 0:
-                    #print(" Current TEST Action command: {} \n".format(a))
                     print(" Action from CNN ACTOR: TEST REWARD: {}\n".format(r))
-                    # Monitor the stiffness values
-                    #Kx_i += a[3]
-                    #Ky_i += a[4]
-                    #Kz_i += a[5]
-                    #print("Integrated change in\n Kx: {}, Ky: {}, Kz: {}\n".format(Kx_i, Ky_i, Kz_i))
                     print("Current test length: {}\n".format(ep_len))
+                    succ_test_env_itr += 1
                 ep_ret += r
                 ep_len += 1
             if not debug:
@@ -448,10 +435,7 @@ def sac(env_fn, actor_critic=CNNActorCritic, ac_kwargs=dict(), seed=0,
 
     obs_space = env.observation_space
     act_space = env.action_space
-
-    # Plot observation
-    #plt.imshow(obs_space{'center'})   
-
+ 
     obs_dim = (obs_space["camera"],obs_space["proprioception"]) #obs_dim = env.observation_space.shape
     act_dim = env.action_space.shape[0]
 
@@ -474,9 +458,9 @@ def sac(env_fn, actor_critic=CNNActorCritic, ac_kwargs=dict(), seed=0,
     replay_buffer = ReplayBuffer(obs_dim=obs_dim, act_dim=act_dim, size=replay_size)
 
     # Count variables (protip: try to get a feel for how different size networks behave!)
-    var_counts = tuple(count_vars(module) for module in [ac.actor, ac.critic_1, ac.critic_2])
+    var_counts = tuple(count_vars(module) for module in [ac.actor, ac.critic_1, ac.critic_2, ac.cnn])
     if not debug:
-        logger.log('\nNumber of parameters: \t pi: %d, \t q1: %d, \t q2: %d\n'%var_counts)
+        logger.log('\nNumber of parameters: \t pi: %d, \t q1: %d, \t q2: %d, \t cnn: %d\n'%var_counts)
 
     # Set up optimizers for policy and q-function
     pi_optimizer = Adam(pi_params, lr=lr)
@@ -510,17 +494,14 @@ def sac(env_fn, actor_critic=CNNActorCritic, ac_kwargs=dict(), seed=0,
         
         # Monitor the stiffness values and action command
         if r != 0:
-            #print("Current Action command: \n {} \n".format(a))
             if action_from_actor:
                 print("the action came from ACTOR!! \n")
             elif action_from_sampler:
                 print("the action came from SAMPLER!! \n")
             #print("Current Action command: \n {} \n".format(a))
             print("\n REWARD: {}\n".format(r))
-            #Kx_i += a[3]
-            #Ky_i += a[4]
-            #Kz_i += a[5]
-            #print("Integrated change in \n Kx : {}, Ky: {}, Kz: {}\n".format(Kx_i, Ky_i, Kz_i))
+            succ_env_itr += 1
+
             
         print("Current step: {}\n Current Epoch:{}\n".format(t,(t+1) // steps_per_epoch))
         # Monitor observation
@@ -571,6 +552,8 @@ def sac(env_fn, actor_critic=CNNActorCritic, ac_kwargs=dict(), seed=0,
             if not debug:
                 print("-------------------------LOGGING EPOCH {}-------------------------".format(epoch))
                 logger.log_tabular('Epoch', epoch)
+                logger.log_tabular('Successful env interacts', succ_env_itr)
+                logger.log_tabular('Successful test env interacts', succ_test_env_itr)
             # logger.log_tabuöar('Amount of Crashes', epoch=epoch)
                 logger.log_tabular('EpRet', with_min_and_max=True, epoch=epoch)
                 logger.log_tabular('TestEpRet', with_min_and_max=True, epoch=epoch)

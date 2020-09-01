@@ -1,10 +1,6 @@
-import redis
 from sai2_environment.robot_env import RobotEnv
 from sai2_environment.action_space import ActionSpace
 
-import numpy as np
-import time
-from PIL import Image
 import torch
 
 from sai2_environment.reinforcement_learning.utils.run_utils import setup_logger_kwargs
@@ -18,7 +14,7 @@ def main():
     hid = 256
     l = 2
     #*** Stuff from OpenAI ***#
-    logger_kwargs = setup_logger_kwargs("peg_in_hole_test", 0, datestamp=True, data_dir='sai2_environment/logs/') # Vars: exp_name, seed
+    logger_kwargs = setup_logger_kwargs("peg_in_hole_test", 0, datestamp=True, data_dir='logs/') # Vars: exp_name, seed
     ac_kwargs = dict(hidden_sizes=[hid]*l)
     torch.set_num_threads(torch.get_num_threads())
 
@@ -36,11 +32,6 @@ def main():
                    observation_type=dict(camera=1, q=0, dq=0, tau=0, x=1, dx=1))    
     # Run SAC
     sac(env, logger_kwargs = logger_kwargs, debug=debug, ac_kwargs=ac_kwargs)
-    """ env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, 
-        steps_per_epoch=4000, epochs=100, replay_size=int(1e6), gamma=0.99, 
-        polyak=0.995, lr=1e-3, alpha=0.2, batch_size=100, start_steps=10000, 
-        update_after=1000, update_every=50, num_test_episodes=10, max_ep_len=1000, 
-        logger_kwargs=dict(), save_freq=1 """
 
 if __name__ == "__main__":
     main()

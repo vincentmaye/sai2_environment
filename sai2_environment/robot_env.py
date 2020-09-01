@@ -18,7 +18,6 @@ class RobotEnv(object):
     """
     The central wrapper around the robot control.
     """
-
     def __init__(self,
                  name='move_object_to_target',
                  simulation=True,

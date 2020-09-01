@@ -8,14 +8,14 @@ class FrameStack():
         self._frames = deque([], maxlen=k)
         self.observation_space ={
             "proprioception": env.observation_space["proprioception"],
-            "camera": (k, *env.observation_space["camera"])
+            "camera": (k,) + env.observation_space["camera"]
         }
         self.action_space = env.action_space
 
     def reset(self):
         obs = self.env.reset()
         for _ in range(self._k):
-            self._frames.append(obs)
+            self._frames.append(obs[0])
         return self._get_obs()
 
     def step(self, action):
