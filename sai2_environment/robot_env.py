@@ -84,7 +84,7 @@ class RobotEnv(object):
 
         time.sleep(1)
 
-        cam, proprio, haptic = self._get_obs()
+        cam, proprio, haptic = self._get_obs_for_init()
         self.observation_space = {
             "camera": cam.shape,
             "proprioception": proprio.shape,
@@ -154,6 +154,8 @@ class RobotEnv(object):
             while not self._client.action_complete():
                 sleep_counter += 1
                 time.sleep(0.01)
+                if sleep_counter > 1000:
+                    return self._get_obs(), 0, False, None
 
             if sleep_counter > 0:
                 reward, done = self._compute_reward()
@@ -201,8 +203,52 @@ class RobotEnv(object):
         haptic_feedback: (tau, contact) = ((7,n), (1,))
         """
         if self.env_config['simulation']:
-            img = self._client.get_camera_frame() if self.observation_type['camera'] else 0
-            camera_frame = self.convert_image(img)
+            img = self._client.get_camera_frame()  if self.observation_type['camera'] else np.array([])
+            camera_frame = self.convert_image(img) if self.observation_type['camera'] else np.array([])
+        else:
+            img = self.camera_handler.get_color_frame()
+            camera_frame = self.convert_image(img)      if self.observation_type['camera'] else np.array([])
+                
+        # retrieve robot state
+        q, dq, x, dx = self._client.get_robot_state()        
+        # normalize proprioception
+        q = self.scaler.q_scaler.transform([q])[0]
+        dq = self.scaler.dq_scaler.transform([dq])[0]
+
+        #retrieve haptics
+        #tau = self.haptic_handler.get_torques_matrix(n=self.env_config["torque_seq_length"])
+        reversed__transposed_tau = np.array([0])
+        contact = np.asarray([self.haptic_handler.contact_occured()])
+        #normalize haptics
+        #tau = self.scaler.tau_scaler.transform(tau)
+        #reversed__transposed_tau = np.transpose(tau[::-1])
+
+        #concatenate only state information which is demanded by observation_type
+        normalized_robot_state = np.array([])
+        if self.observation_type['q']: normalized_robot_state = np.concatenate((normalized_robot_state,q)) 
+        if self.observation_type['dq']: normalized_robot_state = np.concatenate((normalized_robot_state,dq))
+        if self.observation_type['x']: normalized_robot_state = np.concatenate((normalized_robot_state,x))
+        if self.observation_type['dx']: normalized_robot_state = np.concatenate((normalized_robot_state,dx))
+
+        normalized_haptic_feedback = (reversed__transposed_tau, contact)
+        if self.observation_type['camera']: self.render(img) 
+        obs = ()
+        if self.observation_type['camera']: obs = obs + (camera_frame,)
+        obs = obs + (normalized_robot_state,)
+        if self.observation_type['tau']: obs = obs + (normalized_haptic_feedback)
+        if len(obs) == 1: obs = obs[0]
+        return obs
+
+    def _get_obs_for_init(self):
+        """
+        camera_frame: im = (128,128)
+        robot_state: (q,dq) = (14,)
+        robot_state_cartesian: (x,dx) = (6,)
+        haptic_feedback: (tau, contact) = ((7,n), (1,))
+        """
+        if self.env_config['simulation']:
+            img = self._client.get_camera_frame() if self.observation_type['camera'] else np.array([])
+            camera_frame = self.convert_image(img) if self.observation_type['camera'] else np.array([])
         else:
             img = self.camera_handler.get_color_frame() if self.camera_available else 0
             camera_frame = self.convert_image(img)
@@ -231,3 +277,4 @@ class RobotEnv(object):
         normalized_haptic_feedback = (reversed__transposed_tau, contact)
         self.render(img)
         return camera_frame, normalized_robot_state, normalized_haptic_feedback
+
